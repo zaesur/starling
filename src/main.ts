@@ -1,26 +1,25 @@
-import { MeshBasicNodeMaterial, WebGPURenderer } from "three/webgpu";
+import { SpriteNodeMaterial, WebGPURenderer } from "three/webgpu";
 import * as THREE from "three";
 import * as TSL from "three/tsl";
 
+const particleCount = 3000;
 const canvas = document.getElementById("canvas") as HTMLCanvasElement;
 const renderer = new WebGPURenderer({
   canvas,
   antialias: true,
 });
 
-const scene = await createScene();
+const { scene, update } = await createScene(particleCount);
 const camera = createCamera();
 scene.add(camera);
 start();
 
 function render() {
+  // Update the buffer attributes
+  renderer.computeAsync(update().compute(particleCount));
+
+  // Render the scene
   renderer.render(scene, camera);
-  
-  for (const child of scene.children) {
-    if (child instanceof THREE.Mesh) {
-      child.rotation.y += 0.01;
-    }
-  }
 }
 
 function start() {
@@ -34,56 +33,76 @@ function start() {
   renderer.setAnimationLoop(render);
 }
 
-async function createScene() {
+async function createScene(particleCount: number) {
   const scene = new THREE.Scene();
 
-  const particles = await createParticles(30);
+  const { mesh: particles, update } = await createParticles(particleCount);
   scene.add(particles);
 
-  return scene;
+  return { scene, update };
 }
 
 async function createParticles(count: number) {
-  const positions = TSL.instancedArray(count, "vec3");
-  const colors = TSL.instancedArray(count, "vec3");
-
-  const init = TSL.Fn(() => {
-    const position = positions.element(TSL.instanceIndex);
-    const randX = TSL.hash(TSL.instanceIndex).sub(0.5);
-    const randY = TSL.hash(TSL.instanceIndex.add(1)).sub(0.5);
-    const randZ = TSL.hash(TSL.instanceIndex.add(2)).sub(0.5);
-    position.assign(TSL.vec3(randX, randY, randZ));
-
-    const color = colors.element(TSL.instanceIndex.add(4));
-    color.assign(TSL.vec3(randX, randY, randZ));
-  });
-
-  const computeInit = init().compute(count);
-  await renderer.computeAsync(computeInit);
-
-  const material = new MeshBasicNodeMaterial({ color: "blue" });
-
-  material.vertexNode = TSL.Fn(() => {
-    const instancePosition = positions.element(TSL.instanceIndex);
-    const positionWorld = TSL.modelWorldMatrix.mul(TSL.positionLocal);
-    const positionView = TSL.modelViewMatrix.mul(positionWorld).add(instancePosition);
-    const positionClip = TSL.cameraProjectionMatrix.mul(positionView);
-
-    return positionClip;
-  })();
-
-  material.colorNode = colors.toAttribute();
-
+  const material = new SpriteNodeMaterial({ color: "blue" });
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), material);
 
   mesh.count = count;
 
-  return mesh;
+  const positions = TSL.instancedArray(count, "vec3");
+  const velocities = TSL.instancedArray(count, "vec3");
+  const colors = TSL.instancedArray(count, "vec3");
+
+  const randomVec3 = TSL.Fn(({ seed }: { seed: TSLNode }) => {
+    const randX = TSL.hash(seed.add(0));
+    const randY = TSL.hash(seed.add(1));
+    const randZ = TSL.hash(seed.add(2));
+
+    return TSL.vec3(randX, randY, randZ);
+  });
+
+  const init = TSL.Fn(() => {
+    const position = positions.element(TSL.instanceIndex);
+    const velocity = velocities.element(TSL.instanceIndex);
+    const color = colors.element(TSL.instanceIndex);
+
+    const randomPosition = randomVec3({ seed: TSL.instanceIndex.add(0 * 3) })
+      .sub(0.5)
+      .mul(5);
+    const randomVelocity = randomVec3({ seed: TSL.instanceIndex.add(1 * 3) })
+      .sub(0.5)
+      .mul(TSL.vec3(2, 2, 0)); // Neutralize the Z axis;
+    const randomColor = randomVec3({ seed: TSL.instanceIndex.add(2 * 3) });
+
+    position.assign(randomPosition);
+    velocity.assign(randomVelocity);
+    color.assign(randomColor);
+  });
+
+  const update = TSL.Fn(() => {
+    const acceleration = TSL.vec3(0, 0, 0);
+    const position = positions.element(TSL.instanceIndex);
+    const velocity = velocities.element(TSL.instanceIndex);
+
+    velocity.addAssign(acceleration.mul(0.01));
+    position.addAssign(velocity.mul(0.001));
+  });
+
+  material.positionNode = positions.element(TSL.instanceIndex); // positions.toAttribute();
+  material.colorNode = TSL.vec4(colors.element(TSL.instanceIndex), 1);
+
+  material.depthWrite = true;
+  material.depthTest = true;
+  material.transparent = true;
+
+  const computeInit = init().compute(count);
+  await renderer.computeAsync(computeInit);
+
+  return { mesh, update };
 }
 
 function createCamera() {
   const camera = new THREE.PerspectiveCamera(
-    75,
+    50,
     canvas.width / canvas.height,
     0.1,
     100
