@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { WebGPURenderer } from "three/webgpu";
 import { createParticles } from "./particles";
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 const particleCount = 30;
 const canvas = document.getElementById("canvas") as HTMLCanvasElement;
@@ -11,10 +12,13 @@ const renderer = new WebGPURenderer({
 
 const { scene, init, update } = await createScene(particleCount);
 const camera = createCamera();
+const controls = new OrbitControls(camera, renderer.domElement);
 scene.add(camera);
 start();
 
 function render() {
+  controls.update();
+
   // Update the buffer attributes
   renderer.computeAsync(update().compute(particleCount));
 

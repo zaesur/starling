@@ -39,15 +39,26 @@ export async function createParticles(count: number) {
     color.assign(randomColor);
   });
 
+  const isUnderInfluence = TSL.Fn(({ distance }: { distance: TSLNode }) => {
+    const minAreaOfInfluence = 0.01;
+    const maxAreaOfInfluence = 5;
+    return distance.greaterThan(minAreaOfInfluence).and(distance.lessThan(maxAreaOfInfluence));
+  });
+
+  const clampVector = TSL.Fn(({ vector, max }: { vector: TSLNode, max: TSLNode }) => {
+    return TSL.select(vector.length().lessThan(max), vector, vector.normalize().mul(max));
+  });
+
   const update = TSL.Fn(() => {
     const positionStorage = positions.element(TSL.instanceIndex);
     const velocityStorage = velocities.element(TSL.instanceIndex);
     const position = positionStorage.toVar();
     const velocity = velocityStorage.toVar();
 
-    // Pull all particles towards the center of the screen.
-    const directionToCenter = position.normalize();
-    velocity.subAssign(directionToCenter.mul(TSL.deltaTime));
+    const separation = TSL.vec3(0).toVar();
+    const cohesion = TSL.vec3(0).toVar();
+    const alignment = TSL.vec3(0).toVar();
+    const nearbyCount = TSL.uint(0).toVar();
 
     TSL.Loop(
       {
@@ -58,25 +69,25 @@ export async function createParticles(count: number) {
       },
       ({ i }: { i: TSLNode }) => {
         const birdPosition = positionStorage.element(i);
-        const dirToBird = birdPosition.sub(position);
-        const distToBird = dirToBird.length();
-        const distToBirdSq = dirToBird.lengthSq();
+        const birdVelocity = velocityStorage.element(i);
+        const dirAwayFromBird = position.sub(birdPosition);
+        const distToBird = dirAwayFromBird.length();
 
-        const minimumDistance = TSL.float(0.0001);
-        const maximumDistance = TSL.float(0.5);
-
-        // Skip particles that are too close or too far away.
-        TSL.If(
-          distToBirdSq.lessThan(minimumDistance).or(distToBirdSq.greaterThan(maximumDistance)),
-          () => TSL.Continue()
-        );
-
-        // Repel particles from each other.
-        const percent = distToBirdSq.div(maximumDistance);
-        const finalVelocity = dirToBird.normalize().mul(TSL.deltaTime).mul(percent);
-        velocity.subAssign(finalVelocity);
+        TSL.If(isUnderInfluence({ distance: distToBird }), () => {
+          nearbyCount.addAssign(1);
+          separation.addAssign(dirAwayFromBird.div(distToBird));
+          cohesion.addAssign(birdPosition);
+          alignment.addAssign(birdVelocity);
+        });
       }
     );
+
+    const separationDirection = separation.mul(0.0001);
+    const cohesionDirection = cohesion.div(nearbyCount).sub(position).mul(0.01);
+    const alignmentDirection = alignment.div(nearbyCount).mul(0.01);
+    const total = separationDirection.add(cohesionDirection).add(alignmentDirection);
+    
+    velocity.assign(clampVector({ vector: velocity.add(total), max: 2 }));
 
     // Finally, update the velocity and position attributes.
     velocityStorage.assign(velocity);
@@ -86,7 +97,7 @@ export async function createParticles(count: number) {
   material.vertexNode = TSL.Fn(() => {
     const position = positions.element(TSL.instanceIndex);
     return TSL.cameraProjectionMatrix.mul(
-      TSL.modelViewMatrix.mul(TSL.positionLocal).add(position)
+      TSL.modelViewMatrix.mul(TSL.positionLocal.add(position))
     );
   })();
   material.colorNode = TSL.vec4(colors.element(TSL.instanceIndex), 1);
