@@ -1,14 +1,14 @@
 import "./main.css";
 import * as THREE from "three";
 import * as TSL from "three/tsl";
-import { SpriteNodeMaterial } from "three/webgpu";
+import { NodeMaterial } from "three/webgpu";
 
 export async function createParticles(count: number) {
   const positions = TSL.instancedArray(count, "vec3");
   const velocities = TSL.instancedArray(count, "vec3");
   const colors = TSL.instancedArray(count, "vec3");
 
-  const material = new SpriteNodeMaterial({ color: "blue" });
+  const material = new NodeMaterial();
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), material);
 
   mesh.count = count;
@@ -28,10 +28,10 @@ export async function createParticles(count: number) {
 
     const randomPosition = randomVec3({ seed: TSL.instanceIndex.add(0 * 3) })
       .sub(0.5)
-      .mul(5);
+      .mul(TSL.vec3(5, 5, 0));
     const randomVelocity = randomVec3({ seed: TSL.instanceIndex.add(1 * 3) })
       .sub(0.5)
-      .mul(TSL.vec3(2, 2, 0)); // Neutralize the Z axis;
+      .mul(TSL.vec3(1, 1, 0)); // Neutralize the Z axis;
     const randomColor = randomVec3({ seed: TSL.instanceIndex.add(2 * 3) });
 
     position.assign(randomPosition);
@@ -40,15 +40,55 @@ export async function createParticles(count: number) {
   });
 
   const update = TSL.Fn(() => {
-    const acceleration = TSL.vec3(0, 0, 0);
-    const position = positions.element(TSL.instanceIndex);
-    const velocity = velocities.element(TSL.instanceIndex);
+    const positionStorage = positions.element(TSL.instanceIndex);
+    const velocityStorage = velocities.element(TSL.instanceIndex);
+    const position = positionStorage.toVar();
+    const velocity = velocityStorage.toVar();
 
-    velocity.addAssign(acceleration.mul(0.01));
-    position.addAssign(velocity.mul(0.001));
+    // Pull all particles towards the center of the screen.
+    const directionToCenter = position.normalize();
+    velocity.subAssign(directionToCenter.mul(TSL.deltaTime));
+
+    TSL.Loop(
+      {
+        start: TSL.uint(0),
+        end: TSL.uint(count),
+        type: "uint",
+        condition: "<",
+      },
+      ({ i }: { i: TSLNode }) => {
+        const birdPosition = positionStorage.element(i);
+        const dirToBird = birdPosition.sub(position);
+        const distToBird = dirToBird.length();
+        const distToBirdSq = dirToBird.lengthSq();
+
+        const minimumDistance = TSL.float(0.0001);
+        const maximumDistance = TSL.float(0.5);
+
+        // Skip particles that are too close or too far away.
+        TSL.If(
+          distToBirdSq.lessThan(minimumDistance).or(distToBirdSq.greaterThan(maximumDistance)),
+          () => TSL.Continue()
+        );
+
+        // Repel particles from each other.
+        const percent = distToBirdSq.div(maximumDistance);
+        const finalVelocity = dirToBird.normalize().mul(TSL.deltaTime).mul(percent);
+        velocity.subAssign(finalVelocity);
+      }
+    );
+
+    // Finally, update the velocity and position attributes.
+    velocityStorage.assign(velocity);
+    positionStorage.addAssign(velocity.mul(TSL.deltaTime));
   });
 
-  material.positionNode = positions.element(TSL.instanceIndex); // positions.toAttribute();
+  material.vertexNode = TSL.Fn(() => {
+    const position = positions.element(TSL.instanceIndex);
+    return TSL.cameraProjectionMatrix.mul(
+      TSL.modelViewMatrix.mul(TSL.positionLocal).add(position)
+    );
+  })();
   material.colorNode = TSL.vec4(colors.element(TSL.instanceIndex), 1);
 
   material.depthWrite = true;

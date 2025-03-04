@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { WebGPURenderer } from "three/webgpu";
 import { createParticles } from "./particles";
 
-const particleCount = 3000;
+const particleCount = 30;
 const canvas = document.getElementById("canvas") as HTMLCanvasElement;
 const renderer = new WebGPURenderer({
   canvas,
