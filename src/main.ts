@@ -1,7 +1,8 @@
 import * as THREE from "three";
 import { WebGPURenderer } from "three/webgpu";
 import { createParticles } from "./particles";
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { GUI } from "lil-gui";
 
 const particleCount = 30;
 const canvas = document.getElementById("canvas") as HTMLCanvasElement;
@@ -10,7 +11,7 @@ const renderer = new WebGPURenderer({
   antialias: true,
 });
 
-const { scene, init, update } = await createScene(particleCount);
+const { scene, init, update, uniforms } = await createScene(particleCount);
 const camera = createCamera();
 const controls = new OrbitControls(camera, renderer.domElement);
 scene.add(camera);
@@ -27,6 +28,48 @@ function render() {
 }
 
 function start() {
+  const gui = new GUI();
+  const reset = {
+    reset: () => renderer.computeAsync(init().compute(particleCount)),
+  };
+  gui
+    .add(uniforms.separationInfluence, "value")
+    .name("Separation Influence")
+    .min(0)
+    .max(1)
+    .step(0.01);
+  gui
+    .add(uniforms.alignmentInfluence, "value")
+    .name("Alignment Influence")
+    .min(0)
+    .max(3)
+    .step(0.01);
+  gui
+    .add(uniforms.cohesionInfluence, "value")
+    .name("Cohesion Influence")
+    .min(0)
+    .max(5)
+    .step(0.01);
+  gui
+    .add(uniforms.separationStrength, "value")
+    .name("Separation Strength")
+    .min(0)
+    .max(1)
+    .step(0.01);
+  gui
+    .add(uniforms.alignmentStrength, "value")
+    .name("Alignment Strength")
+    .min(0)
+    .max(1)
+    .step(0.01);
+  gui
+    .add(uniforms.cohesionStrength, "value")
+    .name("Cohesion Strength")
+    .min(0)
+    .max(1)
+    .step(0.01);
+  gui.add(reset, "reset");
+
   window.addEventListener("resize", () => {
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.setSize(window.innerWidth, window.innerHeight);

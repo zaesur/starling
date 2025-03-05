@@ -2,8 +2,18 @@ import "./main.css";
 import * as THREE from "three";
 import * as TSL from "three/tsl";
 import { NodeMaterial } from "three/webgpu";
+import { clampVector, isWithinInfluence, randomVec3 } from "./tsl_utils";
 
 export async function createParticles(count: number) {
+  const uniforms = {
+    separationInfluence: TSL.uniform(0.1),
+    separationStrength: TSL.uniform(0.01),
+    alignmentInfluence: TSL.uniform(1),
+    alignmentStrength: TSL.uniform(0.001),
+    cohesionInfluence: TSL.uniform(5),
+    cohesionStrength: TSL.uniform(0.01),
+  };
+
   const positions = TSL.instancedArray(count, "vec3");
   const velocities = TSL.instancedArray(count, "vec3");
   const colors = TSL.instancedArray(count, "vec3");
@@ -13,14 +23,6 @@ export async function createParticles(count: number) {
 
   mesh.count = count;
 
-  const randomVec3 = TSL.Fn(({ seed }: { seed: TSLNode }) => {
-    const randX = TSL.hash(seed.add(0));
-    const randY = TSL.hash(seed.add(1));
-    const randZ = TSL.hash(seed.add(2));
-
-    return TSL.vec3(randX, randY, randZ);
-  });
-
   const init = TSL.Fn(() => {
     const position = positions.element(TSL.instanceIndex);
     const velocity = velocities.element(TSL.instanceIndex);
@@ -28,25 +30,15 @@ export async function createParticles(count: number) {
 
     const randomPosition = randomVec3({ seed: TSL.instanceIndex.add(0 * 3) })
       .sub(0.5)
-      .mul(TSL.vec3(5, 5, 0));
+      .mul(5);
     const randomVelocity = randomVec3({ seed: TSL.instanceIndex.add(1 * 3) })
       .sub(0.5)
-      .mul(TSL.vec3(1, 1, 0)); // Neutralize the Z axis;
+      .mul(1);
     const randomColor = randomVec3({ seed: TSL.instanceIndex.add(2 * 3) });
 
     position.assign(randomPosition);
     velocity.assign(randomVelocity);
     color.assign(randomColor);
-  });
-
-  const isUnderInfluence = TSL.Fn(({ distance }: { distance: TSLNode }) => {
-    const minAreaOfInfluence = 0.01;
-    const maxAreaOfInfluence = 5;
-    return distance.greaterThan(minAreaOfInfluence).and(distance.lessThan(maxAreaOfInfluence));
-  });
-
-  const clampVector = TSL.Fn(({ vector, max }: { vector: TSLNode, max: TSLNode }) => {
-    return TSL.select(vector.length().lessThan(max), vector, vector.normalize().mul(max));
   });
 
   const update = TSL.Fn(() => {
@@ -57,8 +49,18 @@ export async function createParticles(count: number) {
 
     const separation = TSL.vec3(0).toVar();
     const cohesion = TSL.vec3(0).toVar();
+    const cohesionCount = TSL.uint(0).toVar();
     const alignment = TSL.vec3(0).toVar();
-    const nearbyCount = TSL.uint(0).toVar();
+    const alignmentCount = TSL.uint(0).toVar();
+
+    const {
+      separationInfluence,
+      separationStrength,
+      alignmentInfluence,
+      alignmentStrength,
+      cohesionInfluence,
+      cohesionStrength,
+    } = uniforms;
 
     TSL.Loop(
       {
@@ -68,29 +70,65 @@ export async function createParticles(count: number) {
         condition: "<",
       },
       ({ i }: { i: TSLNode }) => {
+        TSL.If(i.equal(TSL.instanceIndex), () => {
+          TSL.Continue();
+        });
+
         const birdPosition = positionStorage.element(i);
         const birdVelocity = velocityStorage.element(i);
         const dirAwayFromBird = position.sub(birdPosition);
         const distToBird = dirAwayFromBird.length();
 
-        TSL.If(isUnderInfluence({ distance: distToBird }), () => {
-          nearbyCount.addAssign(1);
+        const isWithinSeparationInfluence = isWithinInfluence({
+          self: position,
+          other: birdPosition,
+          influence: separationInfluence,
+        });
+
+        TSL.If(isWithinSeparationInfluence, () => {
           separation.addAssign(dirAwayFromBird.div(distToBird));
-          cohesion.addAssign(birdPosition);
+        });
+
+        const isWithinAlignmentInfluence = isWithinInfluence({
+          self: position,
+          other: birdPosition,
+          influence: alignmentInfluence,
+        });
+
+        TSL.If(isWithinAlignmentInfluence, () => {
+          alignmentCount.addAssign(1);
           alignment.addAssign(birdVelocity);
+        });
+
+        const isWithinCohesionInfluence = isWithinInfluence({
+          self: position,
+          other: birdPosition,
+          influence: cohesionInfluence,
+        });
+
+        TSL.If(isWithinCohesionInfluence, () => {
+          cohesionCount.addAssign(1);
+          cohesion.addAssign(birdPosition);
         });
       }
     );
 
-    const separationDirection = separation.mul(0.0001);
-    const cohesionDirection = cohesion.div(nearbyCount).sub(position).mul(0.01);
-    const alignmentDirection = alignment.div(nearbyCount).mul(0.01);
-    const total = separationDirection.add(cohesionDirection).add(alignmentDirection);
-    
-    velocity.assign(clampVector({ vector: velocity.add(total), max: 2 }));
+    const separationDirection = separation.mul(separationStrength);
+    const cohesionDirection = cohesion
+      .div(cohesionCount)
+      .sub(position)
+      .mul(cohesionStrength);
+    const alignmentDirection = alignment
+      .div(alignmentCount)
+      .mul(alignmentStrength);
+    const total = separationDirection
+      .add(cohesionDirection)
+      .add(alignmentDirection);
+
+    velocity.addAssign(total).mul(TSL.deltaTime);
 
     // Finally, update the velocity and position attributes.
-    velocityStorage.assign(velocity);
+    velocityStorage.assign(clampVector({ vector: velocity, max: 2 }));
     positionStorage.addAssign(velocity.mul(TSL.deltaTime));
   });
 
@@ -106,5 +144,5 @@ export async function createParticles(count: number) {
   material.depthTest = true;
   material.transparent = true;
 
-  return { mesh, init, update };
+  return { mesh, init, update, uniforms };
 }
