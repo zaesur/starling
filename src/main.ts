@@ -1,3 +1,4 @@
+import "./main.css";
 import * as THREE from "three";
 import { WebGPURenderer } from "three/webgpu";
 import { createParticles } from "./particles";
@@ -11,7 +12,8 @@ const renderer = new WebGPURenderer({
   antialias: true,
 });
 
-const { scene, init, update, uniforms } = await createScene(particleCount);
+const { scene, init, updatePosition, updateVelocity, uniforms } =
+  await createScene(particleCount);
 const camera = createCamera();
 const controls = new OrbitControls(camera, renderer.domElement);
 scene.add(camera);
@@ -21,55 +23,15 @@ function render() {
   controls.update();
 
   // Update the buffer attributes
-  renderer.computeAsync(update().compute(particleCount));
+  renderer.computeAsync(updateVelocity.compute(particleCount));
+  renderer.computeAsync(updatePosition.compute(particleCount));
 
   // Render the scene
   renderer.render(scene, camera);
 }
 
 function start() {
-  const gui = new GUI();
-  const reset = {
-    reset: () => renderer.computeAsync(init().compute(particleCount)),
-  };
-  gui
-    .add(uniforms.separationInfluence, "value")
-    .name("Separation Influence")
-    .min(0)
-    .max(1)
-    .step(0.01);
-  gui
-    .add(uniforms.alignmentInfluence, "value")
-    .name("Alignment Influence")
-    .min(0)
-    .max(3)
-    .step(0.01);
-  gui
-    .add(uniforms.cohesionInfluence, "value")
-    .name("Cohesion Influence")
-    .min(0)
-    .max(5)
-    .step(0.01);
-  gui
-    .add(uniforms.separationStrength, "value")
-    .name("Separation Strength")
-    .min(0)
-    .max(1)
-    .step(0.01);
-  gui
-    .add(uniforms.alignmentStrength, "value")
-    .name("Alignment Strength")
-    .min(0)
-    .max(1)
-    .step(0.01);
-  gui
-    .add(uniforms.cohesionStrength, "value")
-    .name("Cohesion Strength")
-    .min(0)
-    .max(1)
-    .step(0.01);
-  gui.add(reset, "reset");
-
+  setupGUI();
   window.addEventListener("resize", () => {
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.setSize(window.innerWidth, window.innerHeight);
@@ -78,8 +40,76 @@ function start() {
   });
   window.dispatchEvent(new Event("resize"));
 
-  renderer.computeAsync(init().compute(particleCount));
+  renderer.computeAsync(init.compute(particleCount));
   renderer.setAnimationLoop(render);
+}
+
+function setupGUI() {
+  const gui = new GUI();
+  const reset = {
+    reset: () => renderer.computeAsync(init.compute(particleCount)),
+  };
+  gui
+    .add(uniforms.maxBound, "value")
+    .name("Max Bound")
+    .min(0)
+    .max(10)
+    .step(0.01);
+  gui
+    .add(uniforms.turnStrength, "value")
+    .name("Turn Strength")
+    .min(0)
+    .max(0.01)
+    .step(0.001);
+  gui
+    .add(uniforms.minSpeed, "value")
+    .name("Min Speed")
+    .min(1)
+    .max(3)
+    .step(0.01);
+  gui
+    .add(uniforms.maxSpeed, "value")
+    .name("Max Speed")
+    .min(3)
+    .max(5)
+    .step(0.01);
+  gui
+    .add(uniforms.separationInfluence, "value")
+    .name("Separation Influence")
+    .min(0)
+    .max(0.1)
+    .step(0.001);
+  gui
+    .add(uniforms.separationStrength, "value")
+    .name("Separation Strength")
+    .min(0)
+    .max(0.1)
+    .step(0.01);
+  gui
+    .add(uniforms.alignmentInfluence, "value")
+    .name("Alignment Influence")
+    .min(0)
+    .max(0.3)
+    .step(0.001);
+  gui
+    .add(uniforms.alignmentStrength, "value")
+    .name("Alignment Strength")
+    .min(0)
+    .max(0.1)
+    .step(0.01);
+  gui
+    .add(uniforms.cohesionInfluence, "value")
+    .name("Cohesion Influence")
+    .min(0)
+    .max(0.3)
+    .step(0.001);
+  gui
+    .add(uniforms.cohesionStrength, "value")
+    .name("Cohesion Strength")
+    .min(0)
+    .max(0.1)
+    .step(0.01);
+  gui.add(reset, "reset");
 }
 
 async function createScene(particleCount: number) {

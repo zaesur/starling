@@ -1,28 +1,57 @@
-import "./main.css";
 import * as THREE from "three";
 import * as TSL from "three/tsl";
 import { NodeMaterial } from "three/webgpu";
-import { clampVector, isWithinInfluence, randomVec3 } from "./tsl_utils";
+import { calculateRotationMatrix, clampVector, randomVec3 } from "./tsl_utils";
 
 export async function createParticles(count: number) {
+  /** GPU data */
   const uniforms = {
-    separationInfluence: TSL.uniform(0.1),
-    separationStrength: TSL.uniform(0.01),
-    alignmentInfluence: TSL.uniform(1),
-    alignmentStrength: TSL.uniform(0.001),
-    cohesionInfluence: TSL.uniform(5),
-    cohesionStrength: TSL.uniform(0.01),
+    maxBound: TSL.uniform(5),
+    minSpeed: TSL.uniform(1),
+    maxSpeed: TSL.uniform(3),
+    turnStrength: TSL.uniform(0.1),
+    separationInfluence: TSL.uniform(0),
+    separationStrength: TSL.uniform(0),
+    alignmentInfluence: TSL.uniform(0),
+    alignmentStrength: TSL.uniform(0),
+    cohesionInfluence: TSL.uniform(0),
+    cohesionStrength: TSL.uniform(0),
   };
 
   const positions = TSL.instancedArray(count, "vec3");
   const velocities = TSL.instancedArray(count, "vec3");
   const colors = TSL.instancedArray(count, "vec3");
 
+  /** Material */
   const material = new NodeMaterial();
-  const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), material);
+  material.vertexNode = TSL.Fn(() => {
+    const position = positions.element(TSL.instanceIndex);
+    const velocity = velocities.element(TSL.instanceIndex);
 
+    const rotationMatrix = calculateRotationMatrix({
+      direction: velocity.normalize(),
+      forward: TSL.vec3(0, 1, 0),
+    });
+    const localPosition = rotationMatrix.mul(TSL.positionLocal);
+    const worldPosition = TSL.modelWorldMatrix.mul(localPosition).add(position);
+
+    return TSL.cameraProjectionMatrix
+      .mul(TSL.cameraViewMatrix)
+      .mul(worldPosition);
+  })();
+  material.colorNode = TSL.vec4(colors.element(TSL.instanceIndex), 0.8);
+  material.depthWrite = true;
+  material.depthTest = true;
+  material.transparent = true;
+
+  /** Mesh */
+  const mesh = new THREE.Mesh(
+    new THREE.ConeGeometry(0.1, 0.2, 10, 10),
+    material
+  );
   mesh.count = count;
 
+  /** Compute shaders */
   const init = TSL.Fn(() => {
     const position = positions.element(TSL.instanceIndex);
     const velocity = velocities.element(TSL.instanceIndex);
@@ -39,21 +68,14 @@ export async function createParticles(count: number) {
     position.assign(randomPosition);
     velocity.assign(randomVelocity);
     color.assign(randomColor);
-  });
+  })();
 
-  const update = TSL.Fn(() => {
-    const positionStorage = positions.element(TSL.instanceIndex);
-    const velocityStorage = velocities.element(TSL.instanceIndex);
-    const position = positionStorage.toVar();
-    const velocity = velocityStorage.toVar();
-
-    const separation = TSL.vec3(0).toVar();
-    const cohesion = TSL.vec3(0).toVar();
-    const cohesionCount = TSL.uint(0).toVar();
-    const alignment = TSL.vec3(0).toVar();
-    const alignmentCount = TSL.uint(0).toVar();
-
+  const updateVelocity = TSL.Fn(() => {
     const {
+      maxBound,
+      minSpeed,
+      maxSpeed,
+      turnStrength,
       separationInfluence,
       separationStrength,
       alignmentInfluence,
@@ -61,6 +83,15 @@ export async function createParticles(count: number) {
       cohesionInfluence,
       cohesionStrength,
     } = uniforms;
+
+    const position = positions.element(TSL.instanceIndex);
+    const velocity = velocities.element(TSL.instanceIndex);
+
+    const separationForce = TSL.vec3(0).toVar();
+    const alignmentForce = TSL.vec3(0).toVar();
+    const alignmentCount = TSL.float(0).toVar();
+    const cohesionForce = TSL.vec3(0).toVar();
+    const cohesionCount = TSL.float(0).toVar();
 
     TSL.Loop(
       {
@@ -73,76 +104,42 @@ export async function createParticles(count: number) {
         TSL.If(i.equal(TSL.instanceIndex), () => {
           TSL.Continue();
         });
-
-        const birdPosition = positionStorage.element(i);
-        const birdVelocity = velocityStorage.element(i);
-        const dirAwayFromBird = position.sub(birdPosition);
-        const distToBird = dirAwayFromBird.length();
-
-        const isWithinSeparationInfluence = isWithinInfluence({
-          self: position,
-          other: birdPosition,
-          influence: separationInfluence,
-        });
-
-        TSL.If(isWithinSeparationInfluence, () => {
-          separation.addAssign(dirAwayFromBird.div(distToBird));
-        });
-
-        const isWithinAlignmentInfluence = isWithinInfluence({
-          self: position,
-          other: birdPosition,
-          influence: alignmentInfluence,
-        });
-
-        TSL.If(isWithinAlignmentInfluence, () => {
-          alignmentCount.addAssign(1);
-          alignment.addAssign(birdVelocity);
-        });
-
-        const isWithinCohesionInfluence = isWithinInfluence({
-          self: position,
-          other: birdPosition,
-          influence: cohesionInfluence,
-        });
-
-        TSL.If(isWithinCohesionInfluence, () => {
-          cohesionCount.addAssign(1);
-          cohesion.addAssign(birdPosition);
-        });
+        // Calculate forces here.
       }
     );
 
-    const separationDirection = separation.mul(separationStrength);
-    const cohesionDirection = cohesion
-      .div(cohesionCount)
-      .sub(position)
-      .mul(cohesionStrength);
-    const alignmentDirection = alignment
-      .div(alignmentCount)
-      .mul(alignmentStrength);
-    const total = separationDirection
-      .add(cohesionDirection)
-      .add(alignmentDirection);
-
-    velocity.addAssign(total).mul(TSL.deltaTime);
-
-    // Finally, update the velocity and position attributes.
-    velocityStorage.assign(clampVector({ vector: velocity, max: 2 }));
-    positionStorage.addAssign(velocity.mul(TSL.deltaTime));
-  });
-
-  material.vertexNode = TSL.Fn(() => {
-    const position = positions.element(TSL.instanceIndex);
-    return TSL.cameraProjectionMatrix.mul(
-      TSL.modelViewMatrix.mul(TSL.positionLocal.add(position))
+    // Bounds
+    const isTooFar = TSL.vec3(
+      position.x.abs().greaterThan(maxBound),
+      position.y.abs().greaterThan(maxBound),
+      position.z.abs().greaterThan(maxBound)
     );
+    const turnForce = TSL.vec3(
+      position.x.sign().negate(),
+      position.y.sign().negate(),
+      position.z.sign().negate()
+    ).mul(isTooFar);
+
+    const totalForce = TSL.vec3(0, 0, 0)
+      .add(turnForce.mul(turnStrength))
+      .add(separationForce.mul(separationStrength))
+      .add(alignmentForce.div(alignmentCount.max(1)).mul(alignmentStrength))
+      .add(cohesionForce.div(cohesionCount.max(1)).mul(cohesionStrength));
+
+    const totalVelocity = clampVector({
+      vector: velocity.add(totalForce),
+      min: minSpeed,
+      max: maxSpeed,
+    });
+
+    velocity.assign(totalVelocity);
   })();
-  material.colorNode = TSL.vec4(colors.element(TSL.instanceIndex), 1);
 
-  material.depthWrite = true;
-  material.depthTest = true;
-  material.transparent = true;
+  const updatePosition = TSL.Fn(() => {
+    const position = positions.element(TSL.instanceIndex);
+    const velocity = velocities.element(TSL.instanceIndex);
+    position.addAssign(velocity.mul(TSL.deltaTime));
+  })();
 
-  return { mesh, init, update, uniforms };
+  return { mesh, init, updateVelocity, updatePosition, uniforms };
 }
