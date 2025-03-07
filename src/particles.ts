@@ -16,14 +16,21 @@ export async function createParticles(count: number) {
     alignmentStrength: TSL.uniform(0),
     cohesionInfluence: TSL.uniform(0),
     cohesionStrength: TSL.uniform(0),
+    baseColor: TSL.uniform(new THREE.Color("grey")),
+    ambientLightColor: TSL.uniform(new THREE.Color("white")),
+    ambientLightIntensity: TSL.uniform(0.1),
+    skyColor: TSL.uniform(new THREE.Color(0, 0.3, 0.6)),
+    groundColor: TSL.uniform(new THREE.Color(0.6, 0.3, 0.1)),
+    hemisphereLightIntensity: TSL.uniform(0.5),
   };
 
   const positions = TSL.instancedArray(count, "vec3");
   const velocities = TSL.instancedArray(count, "vec3");
-  const colors = TSL.instancedArray(count, "vec3");
 
   /** Material */
   const material = new NodeMaterial();
+  const normal = TSL.varying(TSL.vec3(0));
+  material.colorNode = uniforms.baseColor;
   material.vertexNode = TSL.Fn(() => {
     const position = positions.element(TSL.instanceIndex);
     const velocity = velocities.element(TSL.instanceIndex);
@@ -35,14 +42,36 @@ export async function createParticles(count: number) {
     const localPosition = rotationMatrix.mul(TSL.positionLocal);
     const worldPosition = TSL.modelWorldMatrix.mul(localPosition).add(position);
 
+    const transformedNormal = rotationMatrix.mul(TSL.normalLocal);
+    normal.assign(transformedNormal);
+
     return TSL.cameraProjectionMatrix
       .mul(TSL.cameraViewMatrix)
       .mul(worldPosition);
   })();
-  material.colorNode = TSL.vec4(colors.element(TSL.instanceIndex), 0.8);
+  material.fragmentNode = TSL.Fn(() => {
+    const { baseColor } = uniforms;
+    const normalizedNormal = normal.normalize().toVar();
+
+    // Ambient
+    const { ambientLightColor, ambientLightIntensity } = uniforms;
+    const ambientLight = ambientLightColor.mul(ambientLightIntensity);
+
+    // Hemisphere light
+    const { skyColor, groundColor, hemisphereLightIntensity } = uniforms;
+    const hemiMix = TSL.remap(normalizedNormal.y, -1, 1, 0, 1);
+    const hemiLight = TSL.mix(skyColor, groundColor, hemiMix).mul(
+      hemisphereLightIntensity
+    );
+
+    const lighting = TSL.vec3(0).add(ambientLight).add(hemiLight);
+    const color = baseColor.mul(lighting);
+    const gamma = TSL.vec3(1.0 / 2.2);
+
+    return TSL.vec4(color.pow(gamma), 1);
+  })();
   material.depthWrite = true;
   material.depthTest = true;
-  material.transparent = true;
 
   /** Mesh */
   const mesh = new THREE.Mesh(
@@ -55,7 +84,6 @@ export async function createParticles(count: number) {
   const init = TSL.Fn(() => {
     const position = positions.element(TSL.instanceIndex);
     const velocity = velocities.element(TSL.instanceIndex);
-    const color = colors.element(TSL.instanceIndex);
 
     const randomPosition = randomVec3({ seed: TSL.instanceIndex.add(0 * 3) })
       .sub(0.5)
@@ -63,11 +91,9 @@ export async function createParticles(count: number) {
     const randomVelocity = randomVec3({ seed: TSL.instanceIndex.add(1 * 3) })
       .sub(0.5)
       .mul(1);
-    const randomColor = randomVec3({ seed: TSL.instanceIndex.add(2 * 3) });
 
     position.assign(randomPosition);
     velocity.assign(randomVelocity);
-    color.assign(randomColor);
   })();
 
   const updateVelocity = TSL.Fn(() => {

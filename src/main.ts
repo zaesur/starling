@@ -44,11 +44,33 @@ function start() {
   renderer.setAnimationLoop(render);
 }
 
+async function createScene(particleCount: number) {
+  const scene = new THREE.Scene();
+
+  const { mesh: particles, ...rest } = await createParticles(particleCount);
+  scene.add(particles);
+
+  return { scene, ...rest };
+}
+
+function createCamera() {
+  const camera = new THREE.PerspectiveCamera(
+    50,
+    canvas.width / canvas.height,
+    0.1,
+    100
+  );
+  camera.position.z = 5;
+
+  return camera;
+}
+
 function setupGUI() {
   const gui = new GUI();
   const reset = {
     reset: () => renderer.computeAsync(init.compute(particleCount)),
   };
+
   gui
     .add(uniforms.maxBound, "value")
     .name("Max Bound")
@@ -73,62 +95,61 @@ function setupGUI() {
     .min(3)
     .max(5)
     .step(0.01);
-  gui
+  gui.add(reset, "reset").name("Reset");
+
+  const flocking = gui.addFolder("Flocking").close();
+  flocking
     .add(uniforms.separationInfluence, "value")
     .name("Separation Influence")
     .min(0)
     .max(0.1)
     .step(0.001);
-  gui
+  flocking
     .add(uniforms.separationStrength, "value")
     .name("Separation Strength")
     .min(0)
     .max(0.1)
     .step(0.01);
-  gui
+  flocking
     .add(uniforms.alignmentInfluence, "value")
     .name("Alignment Influence")
     .min(0)
     .max(0.3)
     .step(0.001);
-  gui
+  flocking
     .add(uniforms.alignmentStrength, "value")
     .name("Alignment Strength")
     .min(0)
     .max(0.1)
     .step(0.01);
-  gui
+  flocking
     .add(uniforms.cohesionInfluence, "value")
     .name("Cohesion Influence")
     .min(0)
     .max(0.3)
     .step(0.001);
-  gui
+  flocking
     .add(uniforms.cohesionStrength, "value")
     .name("Cohesion Strength")
     .min(0)
     .max(0.1)
     .step(0.01);
-  gui.add(reset, "reset");
-}
 
-async function createScene(particleCount: number) {
-  const scene = new THREE.Scene();
-
-  const { mesh: particles, ...rest } = await createParticles(particleCount);
-  scene.add(particles);
-
-  return { scene, ...rest };
-}
-
-function createCamera() {
-  const camera = new THREE.PerspectiveCamera(
-    50,
-    canvas.width / canvas.height,
-    0.1,
-    100
-  );
-  camera.position.z = 5;
-
-  return camera;
+  const lighting = gui.addFolder("Lighting").close();
+  lighting.addColor(uniforms.baseColor, "value").name("Base Color");
+  lighting.addColor(uniforms.ambientLightColor, "value").name("Ambient Light");
+  lighting
+    .add(uniforms.ambientLightIntensity, "value")
+    .name("Ambient Intensity")
+    .min(0)
+    .max(1)
+    .step(0.01);
+  lighting.addColor(uniforms.skyColor, "value").name("Sky Color");
+  lighting.addColor(uniforms.groundColor, "value").name("Ground Color");
+  lighting
+    .add(uniforms.hemisphereLightIntensity, "value")
+    .name("Hemilight Intensity")
+    .min(0)
+    .max(1)
+    .step(0.01);
 }
