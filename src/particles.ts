@@ -1,7 +1,12 @@
 import * as THREE from "three";
 import * as TSL from "three/tsl";
 import { NodeMaterial } from "three/webgpu";
-import { calculateRotationMatrix, clampVector, randomVec3 } from "./tsl_utils";
+import {
+  calculateRotationMatrix,
+  clampVector,
+  isWithinInfluence,
+  randomVec3,
+} from "./tsl_utils";
 
 export async function createParticles(count: number) {
   /** GPU data */
@@ -130,7 +135,43 @@ export async function createParticles(count: number) {
         TSL.If(i.equal(TSL.instanceIndex), () => {
           TSL.Continue();
         });
-        // Calculate forces here.
+        const otherPosition = positions.element(i);
+        const otherVelocity = velocities.element(i);
+
+        const isUnderSeparationInfluence = isWithinInfluence({
+          self: position,
+          other: otherPosition,
+          min: 0,
+          max: separationInfluence,
+        });
+
+        // Move away from nearby particles
+        const direction = position.sub(otherPosition);
+        const distance = direction.lengthSq();
+        const correction = direction.div(distance);
+        separationForce.addAssign(correction.mul(isUnderSeparationInfluence));
+
+        const isUnderAlignmentInfluence = isWithinInfluence({
+          self: position,
+          other: otherPosition,
+          min: separationInfluence,
+          max: alignmentInfluence,
+        });
+
+        // Align with the group
+        alignmentForce.addAssign(otherVelocity.mul(isUnderAlignmentInfluence));
+        alignmentCount.addAssign(isUnderAlignmentInfluence);
+
+        const isUnderCohesionInfluence = isWithinInfluence({
+          self: position,
+          other: otherPosition,
+          min: separationInfluence,
+          max: cohesionInfluence,
+        });
+
+        // Move towards the center of the group
+        cohesionForce.addAssign(otherPosition.mul(isUnderCohesionInfluence));
+        cohesionCount.addAssign(isUnderCohesionInfluence);
       }
     );
 
@@ -150,7 +191,12 @@ export async function createParticles(count: number) {
       .add(turnForce.mul(turnStrength))
       .add(separationForce.mul(separationStrength))
       .add(alignmentForce.div(alignmentCount.max(1)).mul(alignmentStrength))
-      .add(cohesionForce.div(cohesionCount.max(1)).mul(cohesionStrength));
+      .add(
+        cohesionForce
+          .div(cohesionCount.max(1))
+          .sub(position.mul(cohesionCount.min(1)))
+          .mul(cohesionStrength)
+      );
 
     const totalVelocity = clampVector({
       vector: velocity.add(totalForce),

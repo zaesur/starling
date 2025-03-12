@@ -5,7 +5,7 @@ import { createParticles } from "./particles";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { GUI } from "lil-gui";
 
-const particleCount = 30;
+const particleCount = 3000;
 const canvas = document.getElementById("canvas") as HTMLCanvasElement;
 const renderer = new WebGPURenderer({
   canvas,
@@ -102,38 +102,38 @@ function setupGUI() {
     .add(uniforms.separationInfluence, "value")
     .name("Separation Influence")
     .min(0)
-    .max(0.1)
+    .max(0.5)
     .step(0.001);
   flocking
     .add(uniforms.separationStrength, "value")
     .name("Separation Strength")
     .min(0)
-    .max(0.1)
-    .step(0.01);
+    .max(2)
+    .step(0.001);
   flocking
     .add(uniforms.alignmentInfluence, "value")
     .name("Alignment Influence")
     .min(0)
-    .max(0.3)
+    .max(1)
     .step(0.001);
   flocking
     .add(uniforms.alignmentStrength, "value")
     .name("Alignment Strength")
     .min(0)
-    .max(0.1)
-    .step(0.01);
+    .max(2)
+    .step(0.001);
   flocking
     .add(uniforms.cohesionInfluence, "value")
     .name("Cohesion Influence")
     .min(0)
-    .max(0.3)
+    .max(1)
     .step(0.001);
   flocking
     .add(uniforms.cohesionStrength, "value")
     .name("Cohesion Strength")
     .min(0)
-    .max(0.1)
-    .step(0.01);
+    .max(2)
+    .step(0.001);
 
   const lighting = gui.addFolder("Lighting").close();
   lighting.addColor(uniforms.baseColor, "value").name("Base Color");
