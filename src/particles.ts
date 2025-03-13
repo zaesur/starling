@@ -65,7 +65,7 @@ export async function createParticles(count: number) {
     // Hemisphere light
     const { skyColor, groundColor, hemisphereLightIntensity } = uniforms;
     const hemiMix = TSL.remap(normalizedNormal.y, -1, 1, 0, 1);
-    const hemiLight = TSL.mix(skyColor, groundColor, hemiMix).mul(
+    const hemiLight = TSL.mix(groundColor, skyColor, hemiMix).mul(
       hemisphereLightIntensity
     );
 
@@ -147,9 +147,7 @@ export async function createParticles(count: number) {
 
         // Move away from nearby particles
         const direction = position.sub(otherPosition);
-        const distance = direction.lengthSq();
-        const correction = direction.div(distance);
-        separationForce.addAssign(correction.mul(isUnderSeparationInfluence));
+        separationForce.addAssign(direction.mul(isUnderSeparationInfluence));
 
         const isUnderAlignmentInfluence = isWithinInfluence({
           self: position,

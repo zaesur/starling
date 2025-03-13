@@ -5,7 +5,7 @@ import { createParticles } from "./particles";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { GUI } from "lil-gui";
 
-const particleCount = 3000;
+const particleCount = 25000;
 const canvas = document.getElementById("canvas") as HTMLCanvasElement;
 const renderer = new WebGPURenderer({
   canvas,
@@ -19,18 +19,20 @@ const controls = new OrbitControls(camera, renderer.domElement);
 scene.add(camera);
 start();
 
-function render() {
+async function render() {
   controls.update();
 
   // Update the buffer attributes
-  renderer.computeAsync(updateVelocity.compute(particleCount));
-  renderer.computeAsync(updatePosition.compute(particleCount));
+  await renderer.computeAsync([
+    updateVelocity.compute(particleCount),
+    updatePosition.compute(particleCount),
+  ]);
 
   // Render the scene
-  renderer.render(scene, camera);
+  await renderer.renderAsync(scene, camera);
 }
 
-function start() {
+async function start() {
   setupGUI();
   window.addEventListener("resize", () => {
     renderer.setPixelRatio(window.devicePixelRatio);
@@ -40,7 +42,7 @@ function start() {
   });
   window.dispatchEvent(new Event("resize"));
 
-  renderer.computeAsync(init.compute(particleCount));
+  await renderer.computeAsync(init.compute(particleCount));
   renderer.setAnimationLoop(render);
 }
 
