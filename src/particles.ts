@@ -66,7 +66,7 @@ export async function createParticles(count: number) {
     const { skyColor, groundColor, hemisphereLightIntensity } = uniforms;
     const hemiMix = TSL.remap(normalizedNormal.y, -1, 1, 0, 1);
     const hemiLight = TSL.mix(groundColor, skyColor, hemiMix).mul(
-      hemisphereLightIntensity
+      hemisphereLightIntensity,
     );
 
     const lighting = TSL.vec3(0).add(ambientLight).add(hemiLight);
@@ -81,7 +81,7 @@ export async function createParticles(count: number) {
   /** Mesh */
   const mesh = new THREE.Mesh(
     new THREE.ConeGeometry(0.1, 0.2, 10, 10),
-    material
+    material,
   );
   mesh.count = count;
 
@@ -170,20 +170,12 @@ export async function createParticles(count: number) {
         // Move towards the center of the group
         cohesionForce.addAssign(otherPosition.mul(isUnderCohesionInfluence));
         cohesionCount.addAssign(isUnderCohesionInfluence);
-      }
+      },
     );
 
     // Bounds
-    const isTooFar = TSL.vec3(
-      position.x.abs().greaterThan(maxBound),
-      position.y.abs().greaterThan(maxBound),
-      position.z.abs().greaterThan(maxBound)
-    );
-    const turnForce = TSL.vec3(
-      position.x.sign().negate(),
-      position.y.sign().negate(),
-      position.z.sign().negate()
-    ).mul(isTooFar);
+    const isTooFar = position.abs().greaterThan(maxBound);
+    const turnForce = position.sign().negate().mul(isTooFar);
 
     const totalForce = TSL.vec3(0, 0, 0)
       .add(turnForce.mul(turnStrength))
@@ -193,7 +185,7 @@ export async function createParticles(count: number) {
         cohesionForce
           .div(cohesionCount.max(1))
           .sub(position.mul(cohesionCount.min(1)))
-          .mul(cohesionStrength)
+          .mul(cohesionStrength),
       );
 
     const totalVelocity = clampVector({
