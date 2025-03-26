@@ -5,6 +5,7 @@ import {
   calculateRotationMatrix,
   clampVector,
   isWithinInfluence,
+  offsetColor,
   randomVec3,
 } from "./tsl_utils";
 
@@ -70,7 +71,12 @@ export async function createParticles(count: number) {
     );
 
     const lighting = TSL.vec3(0).add(ambientLight).add(hemiLight);
-    const color = baseColor.mul(lighting);
+    const variance = 0.2;
+    const randomBaseColor = offsetColor([
+      baseColor,
+      TSL.hash(TSL.instanceIndex).remap(0, 1, -variance, variance),
+    ]);
+    const color = randomBaseColor.mul(lighting);
     const gamma = TSL.vec3(1.0 / 2.2);
 
     return TSL.vec4(color.pow(gamma), 1);

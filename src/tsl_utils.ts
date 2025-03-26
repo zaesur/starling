@@ -14,14 +14,14 @@ export const isWithinInfluence = TSL.Fn(
   }) => {
     const distance = self.distance(other);
     return distance.greaterThan(min).and(distance.lessThan(max));
-  }
+  },
 );
 
 export const clampVector = TSL.Fn(
   ({ vector, min, max }: { vector: TSLNode; min: TSLNode; max: TSLNode }) => {
     const length = vector.length().min(max).max(min);
     return vector.normalize().mul(length);
-  }
+  },
 );
 
 export const randomVec3 = TSL.Fn(({ seed }: { seed: TSLNode }) => {
@@ -57,5 +57,32 @@ export const calculateRotationMatrix = TSL.Fn(
     );
 
     return rotationMatrix;
-  }
+  },
 );
+
+export const offsetColor = TSL.Fn(([color, angle]: TSLNode[]) => {
+  const c = TSL.cos(angle);
+  const s = TSL.sin(angle);
+  const weights = TSL.vec3(0.213, 0.715, 0.072); // Luminance weights
+
+  const matrix = TSL.mat3(
+    TSL.vec3(
+      weights.x.mul(c.oneMinus()).add(c),
+      weights.x.mul(c.oneMinus()).sub(weights.z.mul(s)),
+      weights.x.mul(c.oneMinus()).add(weights.y.mul(s)),
+    ),
+    TSL.vec3(
+      weights.y.mul(c.oneMinus()).add(weights.z.mul(s)),
+      weights.y.mul(c.oneMinus()).add(c),
+      weights.y.mul(c.oneMinus()).sub(weights.x.mul(s)),
+    ),
+    TSL.vec3(
+      weights.z.mul(c.oneMinus()).sub(weights.y.mul(s)),
+      weights.z.mul(c.oneMinus()).add(weights.x.mul(s)),
+      weights.z.mul(c.oneMinus()).add(c),
+    ),
+  );
+
+  return matrix.mul(color);
+});
+
