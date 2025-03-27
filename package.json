@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "lil-gui": "^0.20.0",
-    "three": "^0.174.0"
+    "three": "^0.174.0",
+    "tsl-textures": "^2.0.0"
   }
 }

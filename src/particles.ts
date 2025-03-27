@@ -1,6 +1,5 @@
 import * as THREE from "three";
-import * as TSL from "three/tsl";
-import { NodeMaterial } from "three/webgpu";
+import { TSL, NodeMaterial } from "three/webgpu";
 import {
   calculateRotationMatrix,
   clampVector,

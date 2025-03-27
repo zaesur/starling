@@ -1,4 +1,6 @@
 import * as TSL from "three/tsl";
+// @ts-ignore
+import { simplexNoise } from "tsl-textures";
 
 export const isWithinInfluence = TSL.Fn(
   ({
@@ -86,3 +88,29 @@ export const offsetColor = TSL.Fn(([color, angle]: TSLNode[]) => {
   return matrix.mul(color);
 });
 
+export const surf = TSL.Fn(([octaves]: TSLNode[]) => {
+  const persistance = TSL.float(0.4);
+  const roughness = TSL.float(3);
+
+  const noise = TSL.vec3(0).toVar();
+  const frequency = TSL.float(1).toVar();
+  const factor = TSL.float(1).toVar();
+
+  TSL.Loop(
+    {
+      start: TSL.uint(0),
+      end: TSL.uint(octaves),
+      type: "uint",
+      condition: "<",
+    },
+    ({ i }: { i: TSLNode }) => {
+      noise.addAssign(
+        simplexNoise({ scale: frequency.add(i.mul(0.72354)) }).mul(factor),
+      );
+      factor.mulAssign(persistance);
+      frequency.mulAssign(roughness);
+    },
+  );
+
+  return noise;
+});

@@ -1,11 +1,18 @@
 import "./main.css";
 import * as THREE from "three";
-import { WebGPURenderer } from "three/webgpu";
+import { NodeMaterial, TSL, WebGPURenderer } from "three/webgpu";
 import { createParticles } from "./particles";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { GUI } from "lil-gui";
+import { surf } from "./tsl_utils";
 
-const particleCount = 25000;
+declare module "three/webgpu" {
+  interface NodeMaterial {
+    wireframe: boolean;
+  }
+}
+
+const particleCount = 2500;
 const canvas = document.getElementById("canvas") as HTMLCanvasElement;
 const renderer = new WebGPURenderer({
   canvas,
@@ -52,6 +59,24 @@ async function createScene(particleCount: number) {
   const { mesh: particles, ...rest } = await createParticles(particleCount);
   scene.add(particles);
 
+  scene.background = new THREE.Color("beige");
+
+  const planeGeometry = new THREE.PlaneGeometry(5, 5, 20, 20);
+  const planeMaterial = new NodeMaterial();
+  planeMaterial.wireframe = true;
+  planeMaterial.colorNode = TSL.vec3(1, 0, 0);
+  planeMaterial.positionNode = TSL.Fn(() => {
+    const offset = surf([4]).mul(TSL.vec3(0, 0, 1));
+
+    return TSL.positionLocal.add(offset);
+  })();
+
+  const plane = new THREE.Mesh(planeGeometry, planeMaterial);
+  plane.position.y = -1;
+  plane.rotation.x = -Math.PI / 2;
+
+  scene.add(plane);
+
   return { scene, ...rest };
 }
 
@@ -60,7 +85,7 @@ function createCamera() {
     50,
     canvas.width / canvas.height,
     0.1,
-    100
+    100,
   );
   camera.position.z = 5;
 
