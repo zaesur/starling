@@ -1,6 +1,4 @@
 import * as TSL from "three/tsl";
-// @ts-ignore
-import { simplexNoise } from "tsl-textures";
 
 export const isWithinInfluence = TSL.Fn(
   ({
@@ -16,14 +14,14 @@ export const isWithinInfluence = TSL.Fn(
   }) => {
     const distance = self.distance(other);
     return distance.greaterThan(min).and(distance.lessThan(max));
-  },
+  }
 );
 
 export const clampVector = TSL.Fn(
   ({ vector, min, max }: { vector: TSLNode; min: TSLNode; max: TSLNode }) => {
     const length = vector.length().min(max).max(min);
     return vector.normalize().mul(length);
-  },
+  }
 );
 
 export const randomVec3 = TSL.Fn(({ seed }: { seed: TSLNode }) => {
@@ -59,7 +57,7 @@ export const calculateRotationMatrix = TSL.Fn(
     );
 
     return rotationMatrix;
-  },
+  }
 );
 
 export const offsetColor = TSL.Fn(([color, angle]: TSLNode[]) => {
@@ -71,46 +69,51 @@ export const offsetColor = TSL.Fn(([color, angle]: TSLNode[]) => {
     TSL.vec3(
       weights.x.mul(c.oneMinus()).add(c),
       weights.x.mul(c.oneMinus()).sub(weights.z.mul(s)),
-      weights.x.mul(c.oneMinus()).add(weights.y.mul(s)),
+      weights.x.mul(c.oneMinus()).add(weights.y.mul(s))
     ),
     TSL.vec3(
       weights.y.mul(c.oneMinus()).add(weights.z.mul(s)),
       weights.y.mul(c.oneMinus()).add(c),
-      weights.y.mul(c.oneMinus()).sub(weights.x.mul(s)),
+      weights.y.mul(c.oneMinus()).sub(weights.x.mul(s))
     ),
     TSL.vec3(
       weights.z.mul(c.oneMinus()).sub(weights.y.mul(s)),
       weights.z.mul(c.oneMinus()).add(weights.x.mul(s)),
-      weights.z.mul(c.oneMinus()).add(c),
-    ),
+      weights.z.mul(c.oneMinus()).add(c)
+    )
   );
 
   return matrix.mul(color);
 });
 
-export const surf = TSL.Fn(([octaves]: TSLNode[]) => {
-  const persistance = TSL.float(0.4);
-  const roughness = TSL.float(3);
+export const noise1d = TSL.Fn(([input]: [ReturnType<typeof TSL.float>]) => {
+  const floor = input.floor();
+  const ceil = input.ceil();
 
-  const noise = TSL.vec3(0).toVar();
-  const frequency = TSL.float(1).toVar();
-  const factor = TSL.float(1).toVar();
+  const n0 = TSL.hash(floor);
+  const n1 = TSL.hash(ceil);
 
-  TSL.Loop(
-    {
-      start: TSL.uint(0),
-      end: TSL.uint(octaves),
-      type: "uint",
-      condition: "<",
-    },
-    ({ i }: { i: TSLNode }) => {
-      noise.addAssign(
-        simplexNoise({ scale: frequency.add(i.mul(0.72354)) }).mul(factor),
-      );
-      factor.mulAssign(persistance);
-      frequency.mulAssign(roughness);
-    },
+  const t = input.fract();  
+  
+  return TSL.mix(n0, n1, t);
+});
+
+
+export const noise2d = TSL.Fn(([input]: [ReturnType<typeof TSL.vec2>]) => {
+  const floor = input.floor().toVar();
+  const ceil = input.ceil().toVar();
+
+  const n00 = TSL.hash(floor.x.mul(floor.y));
+  const n10 = TSL.hash(ceil.x.mul(floor.y));
+  const n01 = TSL.hash(floor.x.mul(ceil.y));
+  const n11 = TSL.hash(ceil.x.mul(ceil.y));
+
+  const t = input.fract();
+
+  // Bilinear interpolation
+  return TSL.mix(
+    TSL.mix(n00, n10, t.x),
+    TSL.mix(n01, n11, t.x),
+    t.y
   );
-
-  return noise;
 });

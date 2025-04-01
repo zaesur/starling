@@ -4,7 +4,7 @@ import { NodeMaterial, TSL, WebGPURenderer } from "three/webgpu";
 import { createParticles } from "./particles";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { GUI } from "lil-gui";
-import { surf } from "./tsl_utils";
+import { noise2d } from "./tsl_utils";
 
 declare module "three/webgpu" {
   interface NodeMaterial {
@@ -12,7 +12,7 @@ declare module "three/webgpu" {
   }
 }
 
-const particleCount = 2500;
+const particleCount = 1;
 const canvas = document.getElementById("canvas") as HTMLCanvasElement;
 const renderer = new WebGPURenderer({
   canvas,
@@ -51,8 +51,11 @@ async function start() {
 
   await renderer.computeAsync(init.compute(particleCount));
   renderer.setAnimationLoop(render);
+
+  // console.log( await renderer.debug.getShaderAsync( scene, camera, plane ) );
 }
 
+var plane: THREE.Mesh;
 async function createScene(particleCount: number) {
   const scene = new THREE.Scene();
 
@@ -66,12 +69,15 @@ async function createScene(particleCount: number) {
   planeMaterial.wireframe = true;
   planeMaterial.colorNode = TSL.vec3(1, 0, 0);
   planeMaterial.positionNode = TSL.Fn(() => {
-    const offset = surf([4]).mul(TSL.vec3(0, 0, 1));
+    const offset = 0.5;
+    const frequency = 10;
+    const amplitude = 0.5;
+    const noise = noise2d(TSL.vec2(TSL.uv().mul(frequency)).add(offset)).mul(amplitude);
 
-    return TSL.positionLocal.add(offset);
+    return TSL.positionLocal.add(TSL.vec3(0, 0, noise));
   })();
 
-  const plane = new THREE.Mesh(planeGeometry, planeMaterial);
+  plane = new THREE.Mesh(planeGeometry, planeMaterial);
   plane.position.y = -1;
   plane.rotation.x = -Math.PI / 2;
 
