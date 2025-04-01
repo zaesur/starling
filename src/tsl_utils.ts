@@ -93,27 +93,32 @@ export const noise1d = TSL.Fn(([input]: [ReturnType<typeof TSL.float>]) => {
   const n0 = TSL.hash(floor);
   const n1 = TSL.hash(ceil);
 
-  const t = input.fract();  
-  
+  const t = input.fract();
+
   return TSL.mix(n0, n1, t);
 });
 
+// Makes use of szudik pairs
+const hash2d = (input: ReturnType<typeof TSL.vec2>) =>
+  TSL.hash(
+    TSL.select(
+      input.x.greaterThanEqual(input.y),
+      input.x.mul(input.x).add(input.x).add(input.y),
+      input.x.add(input.y.mul(input.y))
+    )
+  );
 
 export const noise2d = TSL.Fn(([input]: [ReturnType<typeof TSL.vec2>]) => {
   const floor = input.floor().toVar();
   const ceil = input.ceil().toVar();
 
-  const n00 = TSL.hash(floor.x.mul(floor.y));
-  const n10 = TSL.hash(ceil.x.mul(floor.y));
-  const n01 = TSL.hash(floor.x.mul(ceil.y));
-  const n11 = TSL.hash(ceil.x.mul(ceil.y));
+  const n00 = hash2d(TSL.vec2(floor.x, floor.y));
+  const n10 = hash2d(TSL.vec2(ceil.x, floor.y));
+  const n01 = hash2d(TSL.vec2(floor.x, ceil.y));
+  const n11 = hash2d(TSL.vec2(ceil.x, ceil.y));
 
   const t = input.fract();
 
   // Bilinear interpolation
-  return TSL.mix(
-    TSL.mix(n00, n10, t.x),
-    TSL.mix(n01, n11, t.x),
-    t.y
-  );
+  return TSL.mix(TSL.mix(n00, n10, t.x), TSL.mix(n01, n11, t.x), t.y);
 });
