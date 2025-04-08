@@ -5,6 +5,7 @@ import { createParticles } from "./particles";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { GUI } from "lil-gui";
 import { noise2d } from "./tsl_utils";
+import createPlane from "./plane";
 
 declare module "three/webgpu" {
   interface NodeMaterial {
@@ -55,33 +56,20 @@ async function start() {
   // console.log( await renderer.debug.getShaderAsync( scene, camera, plane ) );
 }
 
-var plane: THREE.Mesh;
+// var plane: THREE.Mesh;
 async function createScene(particleCount: number) {
   const scene = new THREE.Scene();
 
   const { mesh: particles, ...rest } = await createParticles(particleCount);
   scene.add(particles);
 
-  scene.background = new THREE.Color("beige");
-
-  const planeGeometry = new THREE.PlaneGeometry(5, 5, 20, 20);
-  const planeMaterial = new NodeMaterial();
-  planeMaterial.wireframe = true;
-  planeMaterial.colorNode = TSL.vec3(1, 0, 0);
-  planeMaterial.positionNode = TSL.Fn(() => {
-    const offset = 0.5;
-    const frequency = 10;
-    const amplitude = 0.5;
-    const noise = noise2d(TSL.vec2(TSL.uv().mul(frequency)).add(offset)).mul(amplitude);
-
-    return TSL.positionLocal.add(TSL.vec3(0, 0, noise));
-  })();
-
-  plane = new THREE.Mesh(planeGeometry, planeMaterial);
+  const plane = createPlane();
   plane.position.y = -1;
   plane.rotation.x = -Math.PI / 2;
-
   scene.add(plane);
+
+  scene.background = new THREE.Color("beige");
+
 
   return { scene, ...rest };
 }
