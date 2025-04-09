@@ -14,6 +14,8 @@ declare module "three/webgpu" {
 }
 
 const MAX_PARTICLES = 5000;
+const pointer = new THREE.Vector2();
+const raycaster = new THREE.Raycaster();
 const canvas = document.getElementById("canvas") as HTMLCanvasElement;
 const renderer = new WebGPURenderer({
   canvas,
@@ -30,24 +32,42 @@ start();
 async function render() {
   controls.update();
 
+  raycaster.setFromCamera(pointer, camera);
+
   // Update the buffer attributes
   await renderer.computeAsync([
     updateVelocity.compute(MAX_PARTICLES),
     updatePosition.compute(MAX_PARTICLES),
   ]);
 
+  uniforms.rayOrigin.value.copy(raycaster.ray.origin);
+  uniforms.rayDirection.value.copy(raycaster.ray.direction);
+
   // Render the scene
   await renderer.renderAsync(scene, camera);
+
+  // Move pointer away so we only affect birds when moving the mouse
+  pointer.y = 10;
 }
 
 async function start() {
   setupGUI();
+
   window.addEventListener("resize", () => {
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.setSize(window.innerWidth, window.innerHeight);
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
   });
+
+  window.addEventListener("pointermove", (event) => {
+    if (!event.isPrimary) return;
+
+    pointer.x = (event.clientX / window.innerWidth) * 2 - 1;
+    pointer.y = 1 - (event.clientY / window.innerHeight) * 2;
+  });
+
+
   window.dispatchEvent(new Event("resize"));
 
   await renderer.computeAsync(init.compute(MAX_PARTICLES));
@@ -71,7 +91,6 @@ async function createScene(particleCount: number) {
   scene.add(plane);
 
   scene.background = new THREE.Color("beige");
-
 
   return { scene, ...rest };
 }

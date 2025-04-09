@@ -15,6 +15,8 @@ export async function createParticles(count: number) {
     minSpeed: TSL.uniform(1),
     maxSpeed: TSL.uniform(3),
     turnStrength: TSL.uniform(0.1),
+    rayOrigin: TSL.uniform(new THREE.Vector3(Math.Infinity)),
+    rayDirection: TSL.uniform(new THREE.Vector3(Math.Infinity)),
     separationInfluence: TSL.uniform(0),
     separationStrength: TSL.uniform(0),
     alignmentInfluence: TSL.uniform(0),
@@ -112,6 +114,8 @@ export async function createParticles(count: number) {
       minSpeed,
       maxSpeed,
       turnStrength,
+      rayOrigin,
+      rayDirection,
       separationInfluence,
       separationStrength,
       alignmentInfluence,
@@ -122,6 +126,23 @@ export async function createParticles(count: number) {
 
     const position = positions.element(TSL.instanceIndex);
     const velocity = velocities.element(TSL.instanceIndex);
+
+	// Add influence of pointer position to velocity using cached position
+	const directionToRay = rayOrigin.sub( position ).toConst();
+	const projectionLength = TSL.dot( directionToRay, rayDirection ).toConst();
+	const closestPoint = rayOrigin.sub( rayDirection.mul( projectionLength ) ).toConst();
+	const directionToClosestPoint = closestPoint.sub( position ).toConst();
+	const distanceToClosestPoint = TSL.length( directionToClosestPoint ).toConst();
+	const distanceToClosestPointSq = distanceToClosestPoint.mul( distanceToClosestPoint ).toConst();
+
+	const rayRadius = TSL.float( 3 ).toConst();
+	const rayRadiusSq = rayRadius.mul( rayRadius ).toConst();
+
+	TSL.If( distanceToClosestPointSq.lessThan( rayRadiusSq ), () => {
+
+		const velocityAdjust = ( distanceToClosestPointSq.div( rayRadiusSq ).sub( 1.0 ) ).mul( TSL.deltaTime ).mul( 100.0 );
+		velocity.addAssign( TSL.normalize( directionToClosestPoint ).mul( velocityAdjust ) );
+	} );
 
     const separationForce = TSL.vec3(0).toVar();
     const alignmentForce = TSL.vec3(0).toVar();
