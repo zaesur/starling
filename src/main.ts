@@ -1,10 +1,9 @@
 import "./main.css";
 import * as THREE from "three";
-import { NodeMaterial, TSL, WebGPURenderer } from "three/webgpu";
+import { WebGPURenderer } from "three/webgpu";
 import { createParticles } from "./particles";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { GUI } from "lil-gui";
-import { noise2d } from "./tsl_utils";
 import createPlane from "./plane";
 
 declare module "three/webgpu" {
