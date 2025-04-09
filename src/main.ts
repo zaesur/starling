@@ -13,7 +13,7 @@ declare module "three/webgpu" {
   }
 }
 
-const particleCount = 1;
+const MAX_PARTICLES = 5000;
 const canvas = document.getElementById("canvas") as HTMLCanvasElement;
 const renderer = new WebGPURenderer({
   canvas,
@@ -21,7 +21,7 @@ const renderer = new WebGPURenderer({
 });
 
 const { scene, init, updatePosition, updateVelocity, uniforms } =
-  await createScene(particleCount);
+  await createScene(MAX_PARTICLES);
 const camera = createCamera();
 const controls = new OrbitControls(camera, renderer.domElement);
 scene.add(camera);
@@ -32,8 +32,8 @@ async function render() {
 
   // Update the buffer attributes
   await renderer.computeAsync([
-    updateVelocity.compute(particleCount),
-    updatePosition.compute(particleCount),
+    updateVelocity.compute(MAX_PARTICLES),
+    updatePosition.compute(MAX_PARTICLES),
   ]);
 
   // Render the scene
@@ -50,18 +50,20 @@ async function start() {
   });
   window.dispatchEvent(new Event("resize"));
 
-  await renderer.computeAsync(init.compute(particleCount));
+  await renderer.computeAsync(init.compute(MAX_PARTICLES));
   renderer.setAnimationLoop(render);
 
   // console.log( await renderer.debug.getShaderAsync( scene, camera, plane ) );
 }
 
-// var plane: THREE.Mesh;
+var particles: THREE.Mesh;
 async function createScene(particleCount: number) {
   const scene = new THREE.Scene();
 
-  const { mesh: particles, ...rest } = await createParticles(particleCount);
-  scene.add(particles);
+  const { mesh, ...rest } = await createParticles(particleCount);
+
+  particles = mesh;
+  scene.add(mesh);
 
   const plane = createPlane();
   plane.position.y = -1;
@@ -89,8 +91,10 @@ function createCamera() {
 function setupGUI() {
   const gui = new GUI();
   const reset = {
-    reset: () => renderer.computeAsync(init.compute(particleCount)),
+    reset: () => renderer.computeAsync(init.compute(MAX_PARTICLES)),
   };
+
+  gui.add(particles, "count").name("Particle Count").min(1).max(MAX_PARTICLES).step(1);
 
   gui
     .add(uniforms.maxBound, "value")
