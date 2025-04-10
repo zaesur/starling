@@ -14,15 +14,15 @@ export async function createParticles(count: number) {
     maxBound: TSL.uniform(5),
     minSpeed: TSL.uniform(1),
     maxSpeed: TSL.uniform(3),
-    turnStrength: TSL.uniform(0.1),
+    turnStrength: TSL.uniform(0.5),
     rayOrigin: TSL.uniform(new THREE.Vector3(Infinity)),
     rayDirection: TSL.uniform(new THREE.Vector3(Infinity)),
-    separationInfluence: TSL.uniform(0),
-    separationStrength: TSL.uniform(0),
-    alignmentInfluence: TSL.uniform(0),
-    alignmentStrength: TSL.uniform(0),
-    cohesionInfluence: TSL.uniform(0),
-    cohesionStrength: TSL.uniform(0),
+    separationInfluence: TSL.uniform(0.5),
+    separationStrength: TSL.uniform(0.25),
+    alignmentInfluence: TSL.uniform(1),
+    alignmentStrength: TSL.uniform(0.5),
+    cohesionInfluence: TSL.uniform(1),
+    cohesionStrength: TSL.uniform(0.5),
     baseColor: TSL.uniform(new THREE.Color("grey")),
     ambientLightColor: TSL.uniform(new THREE.Color("white")),
     ambientLightIntensity: TSL.uniform(0.1),
@@ -68,7 +68,7 @@ export async function createParticles(count: number) {
     const { skyColor, groundColor, hemisphereLightIntensity } = uniforms;
     const hemiMix = TSL.remap(normalizedNormal.y, -1, 1, 0, 1);
     const hemiLight = TSL.mix(groundColor, skyColor, hemiMix).mul(
-      hemisphereLightIntensity,
+      hemisphereLightIntensity
     );
 
     const lighting = TSL.vec3(0).add(ambientLight).add(hemiLight);
@@ -88,7 +88,7 @@ export async function createParticles(count: number) {
   /** Mesh */
   const mesh = new THREE.Mesh(
     new THREE.ConeGeometry(0.1, 0.2, 10, 10),
-    material,
+    material
   );
   mesh.count = count;
 
@@ -127,22 +127,33 @@ export async function createParticles(count: number) {
     const position = positions.element(TSL.instanceIndex);
     const velocity = velocities.element(TSL.instanceIndex);
 
-	// Add influence of pointer position to velocity using cached position
-	const directionToRay = rayOrigin.sub( position ).toConst();
-	const projectionLength = TSL.dot( directionToRay, rayDirection ).toConst();
-	const closestPoint = rayOrigin.sub( rayDirection.mul( projectionLength ) ).toConst();
-	const directionToClosestPoint = closestPoint.sub( position ).toConst();
-	const distanceToClosestPoint = TSL.length( directionToClosestPoint ).toConst();
-	const distanceToClosestPointSq = distanceToClosestPoint.mul( distanceToClosestPoint ).toConst();
+    // Add influence of pointer position to velocity using cached position
+    const directionToRay = rayOrigin.sub(position).toConst();
+    const projectionLength = TSL.dot(directionToRay, rayDirection).toConst();
+    const closestPoint = rayOrigin
+      .sub(rayDirection.mul(projectionLength))
+      .toConst();
+    const directionToClosestPoint = closestPoint.sub(position).toConst();
+    const distanceToClosestPoint = TSL.length(
+      directionToClosestPoint
+    ).toConst();
+    const distanceToClosestPointSq = distanceToClosestPoint
+      .mul(distanceToClosestPoint)
+      .toConst();
 
-	const rayRadius = TSL.float( 3 ).toConst();
-	const rayRadiusSq = rayRadius.mul( rayRadius ).toConst();
+    const rayRadius = TSL.float(3).toConst();
+    const rayRadiusSq = rayRadius.mul(rayRadius).toConst();
 
-	TSL.If( distanceToClosestPointSq.lessThan( rayRadiusSq ), () => {
-
-		const velocityAdjust = ( distanceToClosestPointSq.div( rayRadiusSq ).sub( 1.0 ) ).mul( TSL.deltaTime ).mul( 100.0 );
-		velocity.addAssign( TSL.normalize( directionToClosestPoint ).mul( velocityAdjust ) );
-	} );
+    TSL.If(distanceToClosestPointSq.lessThan(rayRadiusSq), () => {
+      const velocityAdjust = distanceToClosestPointSq
+        .div(rayRadiusSq)
+        .sub(1.0)
+        .mul(TSL.deltaTime)
+        .mul(100.0);
+      velocity.addAssign(
+        TSL.normalize(directionToClosestPoint).mul(velocityAdjust)
+      );
+    });
 
     const separationForce = TSL.vec3(0).toVar();
     const alignmentForce = TSL.vec3(0).toVar();
@@ -196,12 +207,12 @@ export async function createParticles(count: number) {
         // Move towards the center of the group
         cohesionForce.addAssign(otherPosition.mul(isUnderCohesionInfluence));
         cohesionCount.addAssign(isUnderCohesionInfluence);
-      },
+      }
     );
 
     // Bounds
-    const isTooFar = position.abs().greaterThan(maxBound);
-    const turnForce = position.sign().negate().mul(isTooFar);
+    const isTooFar = position.abs().mul(TSL.vec3(0.75, 2, 1)).greaterThan(maxBound);
+    const turnForce = position.sign().negate().normalize().mul(isTooFar);
 
     const totalForce = TSL.vec3(0, 0, 0)
       .add(turnForce.mul(turnStrength))
@@ -211,7 +222,7 @@ export async function createParticles(count: number) {
         cohesionForce
           .div(cohesionCount.max(1))
           .sub(position.mul(cohesionCount.min(1)))
-          .mul(cohesionStrength),
+          .mul(cohesionStrength)
       );
 
     const totalVelocity = clampVector({

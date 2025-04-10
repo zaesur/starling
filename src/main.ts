@@ -2,7 +2,6 @@ import "./main.css";
 import * as THREE from "three";
 import { WebGPURenderer } from "three/webgpu";
 import { createParticles } from "./particles";
-import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { GUI } from "lil-gui";
 import createPlane from "./plane";
 
@@ -24,12 +23,12 @@ const renderer = new WebGPURenderer({
 const { scene, init, updatePosition, updateVelocity, uniforms } =
   await createScene(MAX_PARTICLES);
 const camera = createCamera();
-const controls = new OrbitControls(camera, renderer.domElement);
+// const controls = new OrbitControls(camera, renderer.domElement);
 scene.add(camera);
 start();
 
 async function render() {
-  controls.update();
+  // controls.update();
 
   raycaster.setFromCamera(pointer, camera);
 
@@ -85,8 +84,10 @@ async function createScene(particleCount: number) {
   scene.add(mesh);
 
   const plane = createPlane();
-  plane.position.y = -1;
+  plane.position.y = -2;
   plane.rotation.x = -Math.PI / 2;
+  plane.rotation.z = Math.PI / 4;
+  plane.rotation.x = -Math.PI / 2.2;
   scene.add(plane);
 
   scene.background = new THREE.Color("beige");
@@ -96,12 +97,12 @@ async function createScene(particleCount: number) {
 
 function createCamera() {
   const camera = new THREE.PerspectiveCamera(
-    50,
+    90,
     canvas.width / canvas.height,
     0.1,
     100,
   );
-  camera.position.z = 5;
+  camera.position.z = 6;
 
   return camera;
 }
@@ -124,7 +125,7 @@ function setupGUI() {
     .add(uniforms.turnStrength, "value")
     .name("Turn Strength")
     .min(0)
-    .max(0.01)
+    .max(1)
     .step(0.001);
   gui
     .add(uniforms.minSpeed, "value")
