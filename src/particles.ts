@@ -11,10 +11,10 @@ import {
 export async function createParticles(count: number) {
   /** GPU data */
   const uniforms = {
-    maxBound: TSL.uniform(5),
+    maxBound: TSL.uniform(7),
     minSpeed: TSL.uniform(1),
     maxSpeed: TSL.uniform(3),
-    turnStrength: TSL.uniform(0.5),
+    turnStrength: TSL.uniform(0.1),
     rayOrigin: TSL.uniform(new THREE.Vector3(Infinity)),
     rayDirection: TSL.uniform(new THREE.Vector3(Infinity)),
     separationInfluence: TSL.uniform(0.5),
@@ -130,16 +130,9 @@ export async function createParticles(count: number) {
     // Add influence of pointer position to velocity using cached position
     const directionToRay = rayOrigin.sub(position).toConst();
     const projectionLength = TSL.dot(directionToRay, rayDirection).toConst();
-    const closestPoint = rayOrigin
-      .sub(rayDirection.mul(projectionLength))
-      .toConst();
+    const closestPoint = rayOrigin.sub(rayDirection.mul(projectionLength)).toConst();
     const directionToClosestPoint = closestPoint.sub(position).toConst();
-    const distanceToClosestPoint = TSL.length(
-      directionToClosestPoint
-    ).toConst();
-    const distanceToClosestPointSq = distanceToClosestPoint
-      .mul(distanceToClosestPoint)
-      .toConst();
+    const distanceToClosestPointSq = directionToClosestPoint.lengthSq().toConst();
 
     const rayRadius = TSL.float(3).toConst();
     const rayRadiusSq = rayRadius.mul(rayRadius).toConst();
@@ -184,7 +177,8 @@ export async function createParticles(count: number) {
 
         // Move away from nearby particles
         const direction = position.sub(otherPosition);
-        separationForce.addAssign(direction.mul(isUnderSeparationInfluence));
+	const distanceSq = direction.lengthSq().oneMinus();
+        separationForce.addAssign(direction.mul(distanceSq).mul(isUnderSeparationInfluence));
 
         const isUnderAlignmentInfluence = isWithinInfluence({
           self: position,
@@ -211,8 +205,9 @@ export async function createParticles(count: number) {
     );
 
     // Bounds
-    const isTooFar = position.abs().mul(TSL.vec3(0.75, 2, 1)).greaterThan(maxBound);
-    const turnForce = position.sign().negate().normalize().mul(isTooFar);
+    const distanceOutOfBounds = position.length().sub(maxBound).max(0);
+    const distanceSq = distanceOutOfBounds.pow2();
+    const turnForce = position.negate().mul(distanceSq);
 
     const totalForce = TSL.vec3(0, 0, 0)
       .add(turnForce.mul(turnStrength))

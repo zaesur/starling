@@ -1,6 +1,7 @@
 import "./main.css";
 import * as THREE from "three";
 import { WebGPURenderer } from "three/webgpu";
+// import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { createParticles } from "./particles";
 import { GUI } from "lil-gui";
 import createPlane from "./plane";
